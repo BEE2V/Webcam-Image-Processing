@@ -7,9 +7,10 @@ CAMERA_INDEX = 1
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
 CROP_TOP = 100  # Crop top 100 pixels
-GRID_SIZE = 10  # Grid spacing in cm
-FLOOR_WIDTH = 40   # Real-world width in cm
-FLOOR_HEIGHT = 80  # Real-world depth in cm
+
+GRID_SIZE = 1  # Grid spacing in cm (smaller for detailed squares)
+SQUARE_WIDTH = 7   # Real-world width of square in cm
+SQUARE_HEIGHT = 7  # Real-world height of square in cm
 
 # === Setup backend ===
 backend = cv2.CAP_V4L2 if platform.system() != "Windows" else cv2.CAP_DSHOW
@@ -23,7 +24,7 @@ if not cap.isOpened():
     print("❌ Could not open camera.")
     exit()
 
-print("✅ Click 4 floor corners: bottom-left, bottom-right, top-right, top-left.")
+print("✅ Click 4 square corners: bottom-left, bottom-right, top-right, top-left.")
 
 # === Global Variables for Mouse Callback ===
 clicked_points = []
@@ -32,8 +33,8 @@ def mouse_callback(event, x, y, flags, param):
         clicked_points.append((x, y))
         print(f"✅ Point {len(clicked_points)}: ({x}, {y})")
 
-cv2.namedWindow("Select Floor Corners")
-cv2.setMouseCallback("Select Floor Corners", mouse_callback)
+cv2.namedWindow("Select Square Corners")
+cv2.setMouseCallback("Select Square Corners", mouse_callback)
 
 # === Wait for 4 corner clicks on the cropped frame ===
 while len(clicked_points) < 4:
@@ -45,19 +46,19 @@ while len(clicked_points) < 4:
     cropped = full_frame[CROP_TOP:, :].copy()
     for pt in clicked_points:
         cv2.circle(cropped, pt, 5, (0, 0, 255), -1)
-    cv2.imshow("Select Floor Corners", cropped)
+    cv2.imshow("Select Square Corners", cropped)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         exit()
 
-cv2.destroyWindow("Select Floor Corners")
+cv2.destroyWindow("Select Square Corners")
 
-# === Define real-world floor rectangle (in cm) ===
+# === Define real-world square (in cm) ===
 world_pts = np.float32([
-    [0, FLOOR_HEIGHT],             # bottom-left
-    [FLOOR_WIDTH, FLOOR_HEIGHT],   # bottom-right
-    [FLOOR_WIDTH, 0],              # top-right
-    [0, 0]                         # top-left
+    [0, SQUARE_HEIGHT],               # bottom-left
+    [SQUARE_WIDTH, SQUARE_HEIGHT],   # bottom-right
+    [SQUARE_WIDTH, 0],               # top-right
+    [0, 0]                            # top-left
 ])
 
 # === Compute homography from real world to cropped image ===
@@ -75,9 +76,9 @@ while True:
 
     cropped = full_frame[CROP_TOP:, :].copy()
 
-    # === Draw grid ===
-    for x in range(0, FLOOR_WIDTH + 1, GRID_SIZE):
-        for y in range(0, FLOOR_HEIGHT + 1, GRID_SIZE):
+    # === Draw grid points ===
+    for x in range(0, SQUARE_WIDTH + 1, GRID_SIZE):
+        for y in range(0, SQUARE_HEIGHT + 1, GRID_SIZE):
             pt = np.array([[[x, y]]], dtype=np.float32)
             img_pt = cv2.perspectiveTransform(pt, H)
             x_img, y_img = img_pt[0][0].astype(int)
@@ -85,9 +86,9 @@ while True:
                 cv2.circle(cropped, (x_img, y_img), 2, (255, 255, 255), -1)
 
     # === Draw grid lines (horizontal) ===
-    for y in range(0, FLOOR_HEIGHT + 1, GRID_SIZE):
+    for y in range(0, SQUARE_HEIGHT + 1, GRID_SIZE):
         row_pts = []
-        for x in range(0, FLOOR_WIDTH + 1, GRID_SIZE):
+        for x in range(0, SQUARE_WIDTH + 1, GRID_SIZE):
             pt = np.array([[[x, y]]], dtype=np.float32)
             img_pt = cv2.perspectiveTransform(pt, H)[0][0]
             row_pts.append((int(img_pt[0]), int(img_pt[1])))
@@ -95,16 +96,17 @@ while True:
             cv2.line(cropped, row_pts[i], row_pts[i+1], (100, 255, 100), 1)
 
     # === Draw grid lines (vertical) ===
-    for x in range(0, FLOOR_WIDTH + 1, GRID_SIZE):
+    for x in range(0, SQUARE_WIDTH + 1, GRID_SIZE):
         col_pts = []
-        for y in range(0, FLOOR_HEIGHT + 1, GRID_SIZE):
+        for y in range(0, SQUARE_HEIGHT + 1, GRID_SIZE):
             pt = np.array([[[x, y]]], dtype=np.float32)
             img_pt = cv2.perspectiveTransform(pt, H)[0][0]
             col_pts.append((int(img_pt[0]), int(img_pt[1])))
         for i in range(len(col_pts) - 1):
             cv2.line(cropped, col_pts[i], col_pts[i+1], (100, 255, 100), 1)
 
-    cv2.imshow("Floor Grid Overlay", cropped)
+    # === Show grid overlay ===
+    cv2.imshow("Square Grid Overlay", cropped)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
