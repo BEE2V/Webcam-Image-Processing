@@ -6,14 +6,13 @@ import platform
 CAMERA_INDEX = 1
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
-CROP_TOP = 240  # Crop top 240 pixels → new view is 240
+CROP_TOP = 300  # Crop top 240 pixels → new view is 240
 YELLOW = (0, 255, 255)
 GREEN = (0, 255, 0)
 RED = (0, 0, 255)
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 THRESHOLD = 50
 center_x = FRAME_WIDTH // 2
-
 
 # === Backend ===
 backend = cv2.CAP_V4L2 if platform.system() != "Windows" else cv2.CAP_DSHOW
@@ -55,26 +54,26 @@ while True:
         break
 
     # === Crop out top section ===
-    frame = full_frame[CROP_TOP:, :]  # frame height is now 380
+    frame = full_frame[CROP_TOP:, :]  # frame height is now dynamic
+    cropped_height = frame.shape[0]
+    center_x = FRAME_WIDTH // 2
+    horizon_y = cropped_height // 2
 
+    # === Get mask and apply yellow background ===
     mask, contours = get_black_mask_and_contours(frame)
     yellow_bg = np.full_like(frame, YELLOW)
     result = np.where(mask[:, :, None] == 255, frame, yellow_bg)
 
-    # Horizon line based on original frame center (240 - 100 = 140 in cropped)
-    horizon_y = FRAME_HEIGHT // 2 - CROP_TOP
-    if 0 <= horizon_y < frame.shape[0]:
+    # Draw horizon and center lines
+    if 0 <= horizon_y < cropped_height:
         cv2.line(result, (0, horizon_y), (FRAME_WIDTH - 1, horizon_y), RED, 2)
+    cv2.line(result, (center_x, 0), (center_x, cropped_height - 1), RED, 1)
 
-    # Draw vertical center line
-    center_x = FRAME_WIDTH // 2
-    cv2.line(result, (center_x, 0), (center_x, frame.shape[0] - 1), RED, 1)
-
-    # Measure areas below horizon
+    # === Measure areas below horizon ===
     error = 0
     left_area = 0
     right_area = 0
-    if 0 <= horizon_y < frame.shape[0]:
+    if 0 <= horizon_y < cropped_height:
         lower_mask = np.zeros_like(mask)
         lower_mask[horizon_y:, :] = mask[horizon_y:, :]
 
@@ -84,43 +83,39 @@ while True:
         error = right_area - left_area
 
         # Visual indicators
-        cv2.rectangle(result, (0, horizon_y), (center_x, frame.shape[0]), (255, 0, 0), 1)
-        cv2.rectangle(result, (center_x, horizon_y), (FRAME_WIDTH, frame.shape[0]), (0, 0, 255), 1)
+        cv2.rectangle(result, (0, horizon_y), (center_x, cropped_height), (255, 0, 0), 1)
+        cv2.rectangle(result, (center_x, horizon_y), (FRAME_WIDTH, cropped_height), (0, 0, 255), 1)
 
     # === Text overlays ===
-    # Error at top-left
     cv2.putText(result, f"Error: {error}", (10, 30), FONT, 0.8, (0, 0, 0), 3, cv2.LINE_AA)
     cv2.putText(result, f"Error: {error}", (10, 30), FONT, 0.8, (255, 255, 255), 1, cv2.LINE_AA)
 
-    # Left area at bottom-left
-    cv2.putText(result, f"Left: {left_area}", (10, frame.shape[0] - 10), FONT, 0.6, (0, 0, 0), 3, cv2.LINE_AA)
-    cv2.putText(result, f"Left: {left_area}", (10, frame.shape[0] - 10), FONT, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(result, f"Left: {left_area}", (10, cropped_height - 10), FONT, 0.6, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(result, f"Left: {left_area}", (10, cropped_height - 10), FONT, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
-    # Right area at bottom-right
     right_text = f"Right: {right_area}"
     text_size, _ = cv2.getTextSize(right_text, FONT, 0.6, 1)
     right_x = FRAME_WIDTH - text_size[0] - 10
-    cv2.putText(result, right_text, (right_x, frame.shape[0] - 10), FONT, 0.6, (0, 0, 0), 3, cv2.LINE_AA)
-    cv2.putText(result, right_text, (right_x, frame.shape[0] - 10), FONT, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(result, right_text, (right_x, cropped_height - 10), FONT, 0.6, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(result, right_text, (right_x, cropped_height - 10), FONT, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
     # === Draw direction arrow ===
-    arrow_start = (center_x, frame.shape[0] // 2)
+    arrow_start = (center_x, cropped_height // 2)
     arrow_color = (255, 255, 255)
     thickness = 4
     tip_length = 0.4
     arrow_len = 50
 
     if error > 1000:  # Turn left
-        arrow_end = (center_x - arrow_len, frame.shape[0] // 2)
+        arrow_end = (center_x - arrow_len, cropped_height // 2)
     elif error < -1000:  # Turn right
-        arrow_end = (center_x + arrow_len, frame.shape[0] // 2)
+        arrow_end = (center_x + arrow_len, cropped_height // 2)
     else:  # Small error: go forward/down
-        arrow_end = (center_x, frame.shape[0] // 2 - arrow_len)
+        arrow_end = (center_x, cropped_height // 2 - arrow_len)
 
     cv2.arrowedLine(result, arrow_start, arrow_end, arrow_color, thickness, tipLength=tip_length)
 
-
-    # Show result
+    # === Show result ===
     cv2.imshow("Wall Detection + Horizon + Error", result)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
