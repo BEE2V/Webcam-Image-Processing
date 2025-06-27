@@ -11,6 +11,7 @@ CROP_TOP = 100  # Crop top 100 pixels
 GRID_SIZE = 1  # Grid spacing in cm (smaller for detailed squares)
 SQUARE_WIDTH = 7   # Real-world width of square in cm
 SQUARE_HEIGHT = 7  # Real-world height of square in cm
+GRID_EXTEND = 7     # How many squares to extend in all directions
 
 # === Setup backend ===
 backend = cv2.CAP_V4L2 if platform.system() != "Windows" else cv2.CAP_DSHOW
@@ -67,6 +68,12 @@ H, _ = cv2.findHomography(world_pts, image_pts)
 
 print("✅ Grid overlay running. Press 'q' to quit.")
 
+# === Grid range with extension ===
+x_start = -GRID_EXTEND * GRID_SIZE
+x_end = (SQUARE_WIDTH + GRID_EXTEND) + 1
+y_start = -GRID_EXTEND * GRID_SIZE
+y_end = (SQUARE_HEIGHT + GRID_EXTEND) + 1
+
 # === Main Loop ===
 while True:
     ret, full_frame = cap.read()
@@ -77,8 +84,8 @@ while True:
     cropped = full_frame[CROP_TOP:, :].copy()
 
     # === Draw grid points ===
-    for x in range(0, SQUARE_WIDTH + 1, GRID_SIZE):
-        for y in range(0, SQUARE_HEIGHT + 1, GRID_SIZE):
+    for x in range(x_start, x_end, GRID_SIZE):
+        for y in range(y_start, y_end, GRID_SIZE):
             pt = np.array([[[x, y]]], dtype=np.float32)
             img_pt = cv2.perspectiveTransform(pt, H)
             x_img, y_img = img_pt[0][0].astype(int)
@@ -86,9 +93,9 @@ while True:
                 cv2.circle(cropped, (x_img, y_img), 2, (255, 255, 255), -1)
 
     # === Draw grid lines (horizontal) ===
-    for y in range(0, SQUARE_HEIGHT + 1, GRID_SIZE):
+    for y in range(y_start, y_end, GRID_SIZE):
         row_pts = []
-        for x in range(0, SQUARE_WIDTH + 1, GRID_SIZE):
+        for x in range(x_start, x_end, GRID_SIZE):
             pt = np.array([[[x, y]]], dtype=np.float32)
             img_pt = cv2.perspectiveTransform(pt, H)[0][0]
             row_pts.append((int(img_pt[0]), int(img_pt[1])))
@@ -96,9 +103,9 @@ while True:
             cv2.line(cropped, row_pts[i], row_pts[i+1], (100, 255, 100), 1)
 
     # === Draw grid lines (vertical) ===
-    for x in range(0, SQUARE_WIDTH + 1, GRID_SIZE):
+    for x in range(x_start, x_end, GRID_SIZE):
         col_pts = []
-        for y in range(0, SQUARE_HEIGHT + 1, GRID_SIZE):
+        for y in range(y_start, y_end, GRID_SIZE):
             pt = np.array([[[x, y]]], dtype=np.float32)
             img_pt = cv2.perspectiveTransform(pt, H)[0][0]
             col_pts.append((int(img_pt[0]), int(img_pt[1])))
